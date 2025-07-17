@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice-to-Text AI Assistant</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the Inter font and general layout */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212; /* Even darker background for a sleek look */
+            color: #e0e0e0; /* Softer light text color */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #1e1e1e; /* Darker container background */
+            border-radius: 1.25rem; /* More rounded corners */
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5); /* Deeper shadow for depth */
+            padding: 3.5rem; /* Increased padding for more breathing room */
+            max-width: 700px; /* Slightly narrower for focus */
+            width: 100%;
+            text-align: center;
+            border: 1px solid #333; /* Subtle border */
+            display: flex; /* Use flexbox for internal alignment */
+            flex-direction: column; /* Stack children vertically */
+            gap: 1.5rem; /* Consistent gap between main sections */
+        }
+        .text-area {
+            min-height: 160px; /* Slightly increased height */
+            background-color: #2a2a2a; /* Darker background for input/transcript areas */
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            text-align: left;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 1px solid #4a4a4a; /* Refined border color */
+            color: #f0f0f0; /* Brighter text color for readability */
+            line-height: 1.6; /* Better line spacing */
+        }
+        .ai-response-area {
+            min-height: 120px; /* Adjusted height */
+            background-color: #2c3e50; /* A deep blue-gray for AI response */
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            text-align: left;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 1px solid #3498db; /* Vibrant blue border */
+            color: #a0d9ff; /* Lighter blue text for contrast */
+            font-weight: 500;
+            line-height: 1.6;
+            /* Removed margin-top as container gap handles spacing */
+        }
+        .toggle-button {
+            padding: 0.85rem 2.5rem; /* Adjusted padding for a better button size */
+            font-size: 1.125rem; /* Larger font size */
+            font-weight: 600; /* Bolder text */
+            border-radius: 9999px; /* Fully rounded */
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); /* Softer shadow */
+            transition: all 0.3s ease-in-out; /* Smoother transitions */
+            border: none; /* Remove default border */
+        }
+        .toggle-button:hover {
+            transform: translateY(-3px); /* More pronounced lift */
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+        .toggle-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        /* Specific button colors */
+        .start-button {
+            background-image: linear-gradient(to right, #4CAF50, #8BC34A); /* Green gradient */
+            color: white;
+        }
+        .start-button:hover {
+            background-image: linear-gradient(to right, #5cb85c, #9ccc65);
+        }
+        .stop-button {
+            background-image: linear-gradient(to right, #E53E3E, #FF6B6B); /* Red gradient */
+            color: white;
+        }
+        .stop-button:hover {
+            background-image: linear-gradient(to right, #dc2626, #ef4444);
+        }
+
+        .loader {
+            border: 4px solid #3a3a3a; /* Darker grey loader track */
+            border-top: 4px solid #63b3ed; /* Lighter blue for contrast */
+            border-radius: 50%;
+            width: 24px; /* Slightly larger loader */
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 12px; /* More space */
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-4xl font-extrabold text-gray-900">
+            <span class="bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-blue-500">
+                AI Voice Assistant
+            </span>
+        </h1>
+
+        <!-- Status message display -->
+        <div id="status" class="text-lg font-medium text-gray-400">
+            Click "Start" to begin.
+        </div>
+
+        <!-- Text display area for transcription -->
+        <div id="transcript" class="text-area text-gray-200 text-lg">
+            Your transcribed text will appear here...
+        </div>
+
+        <!-- AI Response display area -->
+        <div id="aiResponse" class="ai-response-area text-lg">
+            AI's response will appear here...
+        </div>
+
+        <!-- Control button -->
+        <div class="button-group flex justify-center">
+            <button id="toggleButton"
+                    class="toggle-button start-button">
+                Start
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Ensure the DOM is fully loaded before running the script
+        window.onload = function() {
+            const toggleButton = document.getElementById('toggleButton');
+            const transcriptDiv = document.getElementById('transcript');
+            const aiResponseDiv = document.getElementById('aiResponse');
+            const statusDiv = document.getElementById('status');
+
+            // Check if the Web Speech API is available in the browser
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+            const SpeechRecognitionEvent = window.SpeechRecognitionEvent || window.webkitSpeechRecognitionEvent;
+
+            let recognition;
+            let isListening = false;
+            let currentTranscript = ''; // To accumulate text before a command
+
+            // API Key for Gemini API (leave empty, Canvas will provide at runtime)
+            const apiKey = "AIzaSyC6T9SgnS-ng89u9YCf_kJjxHpZ9ek6wh8";
+
+            // Function to call the Gemini API for an AI response
+            async function getAIResponse(prompt) {
+                if (!prompt.trim()) {
+                    aiResponseDiv.textContent = 'Please speak something before asking for an answer.';
+                    statusDiv.textContent = 'Ready. Click Start to speak.';
+                    return;
+                }
+
+                // Display loading indicator
+                statusDiv.innerHTML = 'Thinking... <div class="loader"></div>';
+                aiResponseDiv.textContent = ''; // Clear previous AI response
+
+                // Modified instruction: Ensure at least one sentence, while maintaining brevity and technical style.
+                const fullPromptForModel = `Answer the following question as if in a technical interview at Calix. Provide a concise, professional answer of at least one sentence. Question: ${prompt}`;
+
+                // Prepare payload with only the current prompt
+                const payload = { contents: [{ role: "user", parts: [{ text: fullPromptForModel }] }] };
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const aiText = result.candidates[0].content.parts[0].text;
+                        aiResponseDiv.textContent = aiText; // Directly set text content for instant display
+                    } else {
+                        aiResponseDiv.textContent = 'No AI response received.';
+                    }
+                } catch (error) {
+                    console.error('Error fetching AI response:', error);
+                    aiResponseDiv.textContent = `Error getting AI response: ${error.message}`;
+                } finally {
+                    // Reset status after AI response
+                    statusDiv.textContent = 'Ready. Click Start to speak.';
+                }
+            }
+
+            // Function to initialize and start speech recognition
+            function startRecognition() {
+                // If the API is not supported, display an error and exit
+                if (!SpeechRecognition) {
+                    statusDiv.textContent = 'Web Speech API is not supported in this browser. Please try Chrome or Edge.';
+                    toggleButton.disabled = true;
+                    return;
+                }
+
+                // Clear previous state for new transcription
+                currentTranscript = '';
+                transcriptDiv.textContent = 'Your transcribed text will appear here...';
+                aiResponseDiv.textContent = 'AI\'s response will appear here...';
+
+                // Create a new SpeechRecognition object
+                recognition = new SpeechRecognition();
+
+                // Set properties for continuous listening and interim results
+                recognition.continuous = true; // Keep listening even after a pause
+                recognition.interimResults = true; // Show results while speaking, not just final ones
+                recognition.lang = 'en-US'; // Set the language
+
+                // Event handler for when a speech recognition result is available
+                recognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
+
+                    // Loop through the results to distinguish between interim and final
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript + ' '; // Append final results with a space
+                        } else {
+                            interimTranscript += transcript; // Append interim results
+                        }
+                    }
+
+                    // Update currentTranscript with final results
+                    if (finalTranscript.length > 0) {
+                        currentTranscript += finalTranscript;
+                    }
+
+                    // Update the display with current interim results
+                    transcriptDiv.textContent = currentTranscript + interimTranscript;
+                };
+
+                // Event handler for errors during speech recognition
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    statusDiv.textContent = `Error: ${event.error}. Please ensure microphone access is granted.`;
+                    isListening = false;
+                    toggleButton.textContent = 'Start';
+                    toggleButton.classList.remove('stop-button');
+                    toggleButton.classList.add('start-button');
+                };
+
+                // Event handler for when the speech recognition service ends
+                // This is crucial for continuous listening: restart if it stops unexpectedly
+                recognition.onend = () => {
+                    if (isListening) {
+                        // If we intended to keep listening, restart the recognition
+                        statusDiv.textContent = 'Restarting listening...';
+                        recognition.start();
+                    } else {
+                        // If we stopped it intentionally, update status
+                        statusDiv.textContent = 'Listening stopped. Click Start to speak.';
+                    }
+                };
+
+                // Start the recognition
+                recognition.start();
+                isListening = true;
+                toggleButton.textContent = 'Stop';
+                toggleButton.classList.remove('start-button');
+                toggleButton.classList.add('stop-button');
+                statusDiv.textContent = 'Listening... Speak now.';
+            }
+
+            // Function to stop speech recognition and trigger AI response
+            function stopRecognition() {
+                if (recognition) {
+                    recognition.stop(); // Stop the recognition service
+                }
+                isListening = false;
+                toggleButton.textContent = 'Start';
+                toggleButton.classList.remove('stop-button');
+                toggleButton.classList.add('start-button');
+                statusDiv.textContent = 'Processing your request...';
+
+                // Trigger AI response with the accumulated transcript
+                getAIResponse(currentTranscript.trim());
+            }
+
+            // Event listener for the single toggle button
+            toggleButton.addEventListener('click', () => {
+                if (isListening) {
+                    stopRecognition(); // If currently listening, stop and get answer
+                } else {
+                    startRecognition(); // If not listening, start
+                }
+            });
+        };
+    </script>
+</body>
+</html>
